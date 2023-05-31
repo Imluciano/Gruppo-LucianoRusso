@@ -1,0 +1,153 @@
+//const token = '6247519113:AAEwvVRqlthDfwg4I6BX-SLiwE4F45aXZGk
+const TelegramBot = require('node-telegram-bot-api');
+const token = '6247519113:AAEwvVRqlthDfwg4I6BX-SLiwE4F45aXZGk';
+const bot = new TelegramBot(token, { polling: true });
+
+let paroleDisponibili = ['cane', 'gatto', 'casa', 'giorno', 'sole', 'tavolo', 'libro', 'computer', 'giardino', 'quadro', 'mela', 'orologio', 'musica', 'spiaggia', 'telefono', 'scarpe'];
+let partite = {};
+
+function generaAnagramma() {
+  const indice = Math.floor(Math.random() * paroleDisponibili.length);
+  const parola = paroleDisponibili[indice];
+  const anagramma = parola.split('').sort(() => Math.random() - 0.5).join('');
+  paroleDisponibili.splice(indice, 1); // Rimuovi la parola estratta dall'array delle parole disponibili
+  return { parola, anagramma };
+}
+
+function iniziaNuovaPartita(chatId, multiplayer = false) {
+  const { parola, anagramma } = generaAnagramma();
+
+  if (multiplayer) {
+    if (partite[chatId] === undefined) {
+      partite[chatId] = { multiplayer, punteggi: {}, inGioco: false, parola, anagramma, giocatori: [] };
+    } else {
+      partite[chatId].parola = parola;
+      partite[chatId].anagramma = anagramma;
+      partite[chatId].giocatori.length = 0;
+    }
+  } else {
+    if (partite[chatId] === undefined) {
+      partite[chatId] = { multiplayer, punteggio: 0, penalita: 0, inGioco: true, parola, anagramma };
+    } else {
+      partite[chatId].parola = parola;
+      partite[chatId].anagramma = anagramma;
+    }
+  }
+
+  bot.sendMessage(chatId, `Ecco l'anagramma da indovinare:\n${anagramma}`);
+}
+
+function gestisciGiocoSingleplayer(chatId, msg, rispostaUtente) {
+  const partita = partite[chatId];
+
+  if (rispostaUtente === partita.parola) {
+    partita.punteggio++;
+    bot.sendMessage(chatId, `Bravo! Hai indovinato. Il tuo punteggio attuale è: ${partita.punteggio}`);
+
+    if (partita.punteggio >= 5) {
+      bot.sendMessage(chatId, 'Complimenti! Hai vinto il gioco. Inizia una nuova partita con il comando /start.');
+      delete partite[chatId];
+    } else {
+      iniziaNuovaPartita(chatId);
+    }
+  } else {
+    partita.penalita++;
+    if (partita.penalita >= 3) {
+      bot.sendMessage(chatId, `Hai sbagliato... la parola corretta era: ${partita.parola}. Hai accumulato 3 penalità, la partita termina qui.`);
+      delete partite[chatId];
+    } else {
+      bot.sendMessage(chatId, `Hai sbagliato... la parola corretta era: ${partita.parola}. Fai attenzione, hai già ${partita.penalita} penalità!`);
+      iniziaNuovaPartita(chatId);
+    }
+  }
+}
+
+function gestisciGiocoMultiplayer(chatId, msg, rispostaUtente) {
+  const partita = partite[chatId];
+  const userId = msg.from.id;
+  const username = msg.from.username || msg.from.first_name || msg.from.last_name || userId;
+
+  if (rispostaUtente === partita.parola) {
+    if (partita.punteggi[userId] === undefined) {
+      partita.punteggi[userId] = 1;
+    } else {
+      partita.punteggi[userId]++;
+    }
+
+    bot.sendMessage(chatId, `Bravo ${username}! Hai indovinato. Il tuo punteggio attuale è: ${partita.punteggi[userId]}`);
+
+    if (partita.punteggi[userId] >= 5) {
+      bot.sendMessage(chatId, `Complimenti ${username}! Hai vinto il gioco.`);
+      delete partite[chatId];
+    } else {
+      iniziaNuovaPartita(chatId, true);
+    }
+  }
+}
+
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+  const msgText = msg.text;
+
+  if (msgText === '/start') {
+    bot.sendMessage(chatId, 'Scegli la modalità di gioco: /singleplayer o /multiplayer');
+  } else if (msgText === '/singleplayer') {
+    iniziaNuovaPartita(chatId, false);
+  } else if (msgText === '/multiplayer') {
+    if (partite[chatId] === undefined) {
+      partite[chatId] = { multiplayer: true, punteggi: {}, inGioco: false, giocatori: [] };
+      bot.sendMessage(chatId, `Hai scelto la modalità multiplayer! Unisciti alla partita con il comando /join.`);
+    } else {
+      bot.sendMessage(chatId, 'La partita multiplayer è già stata creata. Unisciti alla partita con il comando /join.');
+    }
+  } else if (msgText === '/join') {
+    const partita = partite[chatId];
+    const userId = msg.from.id;
+    const username = msg.from.username || msg.from.first_name || msg.from.last_name || userId;
+
+    if (partita && partita.multiplayer) {
+      if (partita.giocatori.length < 2) {
+        if (!partita.giocatori.includes(userId)) {
+          partita.giocatori.push(userId);
+          bot.sendMessage(chatId, `${username} è entrato nella lista di attesa.`);
+
+          if (partita.giocatori.length === 1) {
+            bot.sendMessage(chatId, `${username} è il primo giocatore. Puoi avviare la partita con /play.`);
+          } else if (partita.giocatori.length === 2) {
+            bot.sendMessage(chatId, `${username} è il secondo giocatore. La partita sta per iniziare. Coming soon.`);
+            iniziaNuovaPartita(chatId, true);
+          }
+        } else {
+          bot.sendMessage(chatId, 'Sei già nella lista di attesa per la partita multiplayer.');
+        }
+      } else {
+        bot.sendMessage(chatId, 'La lista di attesa è già piena. La partita sta per iniziare. Coming soon.');
+        iniziaNuovaPartita(chatId, true);
+      }
+    } else {
+      bot.sendMessage(chatId, 'Non è stata creata una partita multiplayer. Avvia una partita con il comando /multiplayer.');
+    }
+  } else if (msgText === '/play') {
+    const partita = partite[chatId];
+    const userId = msg.from.id;
+
+    if (partita && partita.multiplayer && partita.giocatori.length === 2 && partita.giocatori[0] === userId) {
+      partita.inGioco = true;
+      bot.sendMessage(chatId, 'La partita è iniziata. Buona fortuna!');
+      iniziaNuovaPartita(chatId, true);
+    } else {
+      bot.sendMessage(chatId, 'coming soon!!!!!!!!!!');
+    }
+  } else if (partite[chatId] && partite[chatId].inGioco) {
+    const partita = partite[chatId];
+
+    if (partita.multiplayer) {
+      const userId = msg.from.id;
+      if (partita.giocatori.includes(userId)) {
+        gestisciGiocoMultiplayer(chatId, msg, msgText);
+      }
+    } else {
+      gestisciGiocoSingleplayer(chatId, msg, msgText);
+    }
+  }
+});
