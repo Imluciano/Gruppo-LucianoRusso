@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const token = '6247519113:AAEwvVRqlthDfwg4I6BX-SLiwE4F45aXZGk';
 const bot = new TelegramBot(token, { polling: true });
 
-let paroleDisponibili = ['cane', 'gatto', 'casa', 'giorno', 'sole', 'tavolo', 'libro', 'computer', 'giardino', 'quadro', 'mela', 'orologio', 'musica', 'spiaggia', 'telefono', 'scarpe'];
+let paroleDisponibili = ['cane', 'gatto', 'casa', 'giorno', 'sole', 'pedissequamente', 'libro', 'della costanza', 'giardino', 'quadro', 'mela', 'orologio', 'musicista', 'spiaggia', 'telefono', 'arcipelago'];
 let partite = {};
 
 function generaAnagramma() {
